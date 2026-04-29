@@ -2,7 +2,7 @@ import json
 import os
 import streamlit as st
 
-st.set_page_config(page_title="UB Cost Calculator", page_icon="💄", layout="wide",
+st.set_page_config(page_title="UB Cost Calculator", page_icon="🐱", layout="wide",
                    initial_sidebar_state="expanded")
 st.title("UB Cost Calculator")
 st.caption("UK · AU · CA — side by side")
@@ -12,11 +12,11 @@ st.caption("UK · AU · CA — side by side")
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.json")
 
 DEFAULTS = {
-    "eur_gbp": 0.855, "eur_aud": 1.650, "eur_usd": 1.080, "usd_cad": 1.360,
+    "eur_gbp": 0.855, "eur_aud": 1.634, "eur_usd": 1.080, "usd_cad": 1.360,
     "dsf":     3.0,
-    "uk_ship": 0.00, "uk_lab": 0.00, "uk_fba": 2.99, "uk_ref": 15.0, "uk_vat": 20.0,
-    "au_ship": 0.00, "au_lab": 0.00, "au_fba": 7.30, "au_ref": 13.0, "au_gst": 10.0, "au_tar": 5.0,
-    "ca_ship": 0.00, "ca_lab": 0.00, "ca_fba": 7.33, "ca_ref": 15.0,
+    "uk_ship": 0.85,  "uk_lab": 2.58,  "uk_fba": 3.09, "uk_ref": 15.0, "uk_vat": 20.0,
+    "au_ship": 10.40, "au_lab": 2.58,  "au_fba": 7.30, "au_ref": 13.0, "au_gst": 10.0, "au_tar": 5.0,
+    "ca_ship": 3.57,  "ca_lab": 2.58,  "ca_fba": 7.33, "ca_ref": 15.0,
 }
 
 def load_config():
@@ -43,8 +43,6 @@ with st.sidebar:
         eur_aud = st.number_input("EUR → AUD", value=cfg["eur_aud"], step=0.001, format="%.4f", key="eur_aud")
         eur_usd = st.number_input("EUR → USD", value=cfg["eur_usd"], step=0.001, format="%.4f", key="eur_usd")
         usd_cad = st.number_input("USD → CAD", value=cfg["usd_cad"], step=0.001, format="%.4f", key="usd_cad")
-    eur_cad = eur_usd * usd_cad
-
     dsf_rate = st.number_input("Digital Svc Fee (%)", value=cfg["dsf"], step=0.5, format="%.1f", key="dsf") / 100
 
     st.markdown("---")
@@ -64,14 +62,14 @@ with st.sidebar:
         ref_au      = st.number_input("Referral fee (%)",      value=cfg["au_ref"],  step=0.5,  format="%.1f", key="au_ref") / 100
         au_gst      = st.number_input("GST rate (%)",          value=cfg["au_gst"],  step=0.5,  format="%.1f", key="au_gst") / 100
         au_tariff   = st.number_input("Import tariff (%)",     value=cfg["au_tar"],  step=0.5,  format="%.1f", key="au_tar") / 100
-        st.caption("Import tariff + GST on import in COGS. Referral applied to sell ex-GST.")
+        st.caption("Import tariff in COGS. Import GST not in COGS (reclaimable). Referral applied to sell ex-GST.")
 
     with st.expander("🇨🇦  CA Parameters", expanded=True):
         ca_shipping = st.number_input("Shipping / unit (EUR)", value=cfg["ca_ship"], step=0.10, format="%.2f", key="ca_ship")
         ca_labor    = st.number_input("Labor / unit (EUR)",    value=cfg["ca_lab"],  step=0.10, format="%.2f", key="ca_lab")
-        fba_usd     = st.number_input("FBA fee (USD)",         value=cfg["ca_fba"],  step=0.01, format="%.2f", key="ca_fba")
+        fba_cad     = st.number_input("FBA fee (CAD)",         value=cfg["ca_fba"],  step=0.01, format="%.2f", key="ca_fba")
         ref_ca      = st.number_input("Referral fee (%)",      value=cfg["ca_ref"],  step=0.5,  format="%.1f", key="ca_ref") / 100
-        st.caption("Sell price entered ex-tax. No import tax in COGS.")
+        st.caption("All results in USD. Sell price (CAD) and FBA (CAD) converted to USD internally.")
 
     st.markdown("---")
     if st.button("💾 Save Parameters", use_container_width=True):
@@ -102,9 +100,9 @@ with c3:
     )
 with c4:
     sell_cad = st.number_input(
-        "Sell CA (CAD, ex-tax)",
+        "Sell CA (CAD, from Seller Sprite)",
         min_value=0.0, value=0.0, step=1.0, format="%.2f",
-        help="Listing price from Seller Sprite (already ex-tax, used as-is)"
+        help="CAD price from Seller Sprite — converted to USD internally for all calculations"
     )
 
 # ─── CALCULATION FUNCTIONS ────────────────────────────────────────────────────
@@ -116,12 +114,12 @@ def calc_uk(p_eur, s_gbp):
     s    = s_gbp / (1 + uk_vat)
     ref  = s * ref_uk
     dsf  = (ref + fba_gbp) * dsf_rate
-    fees = ref + fba_gbp + dsf
-    ppu  = s - cogs - fees
+    # UK spreadsheet: PPU = sell_ex_vat - COGS - FBA - Referral (DSF shown but not deducted from PPU)
+    ppu  = s - cogs - fba_gbp - ref
     roi  = ppu / cogs if cogs > 0 else 0
     return dict(cur="GBP", purchase=p, ship_labor=sl, tariff_gst=None,
                 cogs=cogs, sell_ex=s, ref=ref, fba=fba_gbp, dsf=dsf,
-                fees=fees, ppu=ppu, roi=roi,
+                fees=ref + fba_gbp + dsf, ppu=ppu, roi=roi,
                 tax_note=f"VAT {uk_vat:.0%} stripped from sell price")
 
 def calc_au(p_eur, s_aud):
@@ -129,34 +127,38 @@ def calc_au(p_eur, s_aud):
     ship_aud = au_shipping * eur_aud
     lab_aud  = au_labor * eur_aud
     tariff   = (p + ship_aud) * au_tariff
-    gst_imp  = (p + ship_aud + tariff) * au_gst
-    cogs     = p + ship_aud + lab_aud + tariff + gst_imp
-    s        = s_aud / (1 + au_gst)
+    # Import GST is NOT in COGS — it is reclaimable as input tax credit
+    cogs     = p + ship_aud + lab_aud + tariff
+    s        = s_aud / (1 + au_gst)   # strip GST from sell price only
     ref      = s * ref_au
     dsf      = (ref + fba_aud) * dsf_rate
     fees     = ref + fba_aud + dsf
     ppu      = s - cogs - fees
     roi      = ppu / cogs if cogs > 0 else 0
     return dict(cur="AUD", purchase=p, ship_labor=ship_aud + lab_aud,
-                tariff_gst=tariff + gst_imp,
+                tariff_gst=tariff,
                 cogs=cogs, sell_ex=s, ref=ref, fba=fba_aud, dsf=dsf,
                 fees=fees, ppu=ppu, roi=roi,
-                tax_note=f"Tariff {au_tariff:.0%} + GST {au_gst:.0%} on import in COGS; GST stripped from sell price")
+                tax_note=f"Import tariff {au_tariff:.0%} in COGS; GST {au_gst:.0%} stripped from sell price only")
 
 def calc_ca(p_eur, s_cad):
-    p     = p_eur * eur_cad
-    sl    = (ca_shipping + ca_labor) * eur_cad
-    cogs  = p + sl
-    fba_c = fba_usd * usd_cad
-    ref   = s_cad * ref_ca
-    dsf   = (ref + fba_c) * dsf_rate
-    fees  = ref + fba_c + dsf
-    ppu   = s_cad - cogs - fees
-    roi   = ppu / cogs if cogs > 0 else 0
-    return dict(cur="CAD", purchase=p, ship_labor=sl, tariff_gst=None,
-                cogs=cogs, sell_ex=s_cad, ref=ref, fba=fba_c, dsf=dsf,
+    # Everything in USD
+    cad_usd  = 1 / usd_cad
+    p_usd    = p_eur * eur_usd
+    ship_usd = ca_shipping * eur_usd
+    lab_usd  = ca_labor * eur_usd
+    cogs     = p_usd + ship_usd + lab_usd
+    sell_usd = s_cad * cad_usd          # CAD sell price → USD
+    fba_usd  = fba_cad * cad_usd        # CAD FBA fee → USD
+    ref      = sell_usd * ref_ca
+    dsf      = (ref + fba_usd) * dsf_rate
+    fees     = ref + fba_usd + dsf
+    ppu      = sell_usd - cogs - fees
+    roi      = ppu / cogs if cogs > 0 else 0
+    return dict(cur="USD", purchase=p_usd, ship_labor=ship_usd + lab_usd, tariff_gst=None,
+                cogs=cogs, sell_ex=sell_usd, ref=ref, fba=fba_usd, dsf=dsf,
                 fees=fees, ppu=ppu, roi=roi,
-                tax_note="Sell price entered ex-tax — no stripping applied")
+                tax_note=f"Sell price {s_cad:.2f} CAD → {sell_usd:.2f} USD. All values in USD.")
 
 uk = calc_uk(purchase_eur, sell_gbp)
 au = calc_au(purchase_eur, sell_aud)
@@ -194,7 +196,7 @@ def render_market(title, d, has_sell):
             (f"Shipping + Labor ({c})", d["ship_labor"]),
         ]
         if d["tariff_gst"] is not None:
-            lines.append((f"Tariff + Import GST ({c})", d["tariff_gst"]))
+            lines.append((f"Import tariff ({c})", d["tariff_gst"]))
         lines += [
             (f"**COGS ({c})**",         d["cogs"]),
             ("---", None),
