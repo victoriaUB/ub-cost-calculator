@@ -12,7 +12,7 @@ st.caption("UK · AU · CA — side by side")
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.json")
 
 DEFAULTS = {
-    "eur_gbp": 0.855, "eur_aud": 1.634, "eur_usd": 1.080, "usd_cad": 1.360,
+    "eur_gbp": 0.867, "eur_aud": 1.634, "eur_usd": 1.170, "usd_cad": 1.369,
     "dsf":     3.0,
     "uk_ship": 0.85,  "uk_lab": 2.58,  "uk_fba": 3.09, "uk_ref": 15.0, "uk_vat": 20.0,
     "au_ship": 10.40, "au_lab": 2.58,  "au_fba": 7.30, "au_ref": 13.0, "au_gst": 10.0, "au_tar": 5.0,
