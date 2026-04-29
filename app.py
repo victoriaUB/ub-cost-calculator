@@ -1,5 +1,6 @@
 import json
 import os
+import requests
 import streamlit as st
 
 st.set_page_config(page_title="UB Cost Calculator", page_icon="🐱", layout="wide",
@@ -31,6 +32,31 @@ def save_config():
     with open(CONFIG_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
+def save_config_from_dict(updates):
+    current = load_config()
+    current.update(updates)
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(current, f, indent=2)
+
+@st.cache_data(ttl=3600)
+def fetch_live_rates():
+    try:
+        r = requests.get(
+            "https://api.frankfurter.app/latest?from=EUR&to=GBP,AUD,USD,CAD",
+            timeout=5,
+        )
+        data = r.json()
+        rates = data["rates"]
+        return {
+            "eur_gbp": round(rates["GBP"], 4),
+            "eur_aud": round(rates["AUD"], 4),
+            "eur_usd": round(rates["USD"], 4),
+            "usd_cad": round(rates["CAD"] / rates["USD"], 4),
+            "date": data.get("date", "unknown"),
+        }
+    except Exception:
+        return None
+
 cfg = load_config()
 
 # ─── SIDEBAR: Parameters ──────────────────────────────────────────────────────
@@ -39,6 +65,12 @@ with st.sidebar:
     st.header("Parameters")
 
     with st.expander("Exchange Rates", expanded=True):
+        live = fetch_live_rates()
+        if live:
+            st.caption(f"Live rates available (ECB, {live['date']})")
+            if st.button("🔄 Use live rates", use_container_width=True):
+                save_config_from_dict({k: live[k] for k in ["eur_gbp", "eur_aud", "eur_usd", "usd_cad"]})
+                st.rerun()
         eur_gbp = st.number_input("EUR → GBP", value=cfg["eur_gbp"], step=0.001, format="%.4f", key="eur_gbp")
         eur_aud = st.number_input("EUR → AUD", value=cfg["eur_aud"], step=0.001, format="%.4f", key="eur_aud")
         eur_usd = st.number_input("EUR → USD", value=cfg["eur_usd"], step=0.001, format="%.4f", key="eur_usd")
@@ -100,7 +132,7 @@ with c3:
     )
 with c4:
     sell_cad = st.number_input(
-        "Sell CA (CAD, from Seller Sprite)",
+        "Sell CA (CAD)",
         min_value=0.0, value=0.0, step=1.0, format="%.2f",
         help="CAD price from Seller Sprite — converted to USD internally for all calculations"
     )
@@ -156,7 +188,7 @@ def calc_ca(p_eur, s_cad):
     ppu      = sell_usd - cogs - fees
     roi      = ppu / cogs if cogs > 0 else 0
     return dict(cur="USD", purchase=p_usd, ship_labor=ship_usd + lab_usd, tariff_gst=None,
-                cogs=cogs, sell_ex=sell_usd, ref=ref, fba=fba_usd, dsf=dsf,
+                cogs=cogs, cogs_cad=cogs * usd_cad, sell_ex=sell_usd, ref=ref, fba=fba_usd, dsf=dsf,
                 fees=fees, ppu=ppu, roi=roi,
                 tax_note=f"Sell price {s_cad:.2f} CAD → {sell_usd:.2f} USD. All values in USD.")
 
@@ -199,6 +231,10 @@ def render_market(title, d, has_sell):
             lines.append((f"Import tariff ({c})", d["tariff_gst"]))
         lines += [
             (f"**COGS ({c})**",         d["cogs"]),
+        ]
+        if d.get("cogs_cad") is not None:
+            lines.append(("COGS (CAD)", d["cogs_cad"]))
+        lines += [
             ("---", None),
             (f"Sell ex-tax ({c})",      d["sell_ex"]),
             (f"Referral fee ({c})",     d["ref"]),
@@ -222,7 +258,3 @@ def render_market(title, d, has_sell):
 col1, col2, col3 = st.columns(3)
 with col1:
     render_market("🇬🇧  United Kingdom", uk, sell_gbp > 0)
-with col2:
-    render_market("🇦🇺  Australia",      au, sell_aud > 0)
-with col3:
-    render_market("🇨🇦  Canada",         ca, sell_cad > 0)
