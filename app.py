@@ -258,3 +258,7 @@ def render_market(title, d, has_sell):
 col1, col2, col3 = st.columns(3)
 with col1:
     render_market("🇬🇧  United Kingdom", uk, sell_gbp > 0)
+with col2:
+    render_market("🇦🇺  Australia",      au, sell_aud > 0)
+with col3:
+    render_market("🇨🇦  Canada",         ca, sell_cad > 0)
