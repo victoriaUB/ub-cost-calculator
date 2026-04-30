@@ -110,12 +110,12 @@ with st.sidebar:
 
 # ─── PRODUCT INPUT ────────────────────────────────────────────────────────────
 
-st.subheader("Product")
+st.subheader("COGS and ROI per market")
 c1, c2, c3, c4 = st.columns([1.2, 1, 1, 1])
 
 with c1:
     purchase_eur = st.number_input(
-        "Purchase price (EUR)",
+        "Purchase price (EUR, excl VAT)",
         min_value=0.0, value=0.00, step=0.50, format="%.2f"
     )
 with c2:
@@ -132,9 +132,9 @@ with c3:
     )
 with c4:
     sell_cad = st.number_input(
-        "Sell CA (CAD)",
+        "Sell CA (CAD, excl GST)",
         min_value=0.0, value=0.0, step=1.0, format="%.2f",
-        help="CAD price from Seller Sprite — converted to USD internally for all calculations"
+        help="CAD listing price — converted to USD internally for all calculations"
     )
 
 # ─── CALCULATION FUNCTIONS ────────────────────────────────────────────────────
@@ -161,7 +161,7 @@ def calc_au(p_eur, s_aud):
     tariff   = (p + ship_aud) * au_tariff
     # Import GST is NOT in COGS — it is reclaimable as input tax credit
     cogs     = p + ship_aud + lab_aud + tariff
-    s        = s_aud / (1 + au_gst)   # strip GST from sell price only
+    s        = s_aud / (1 + au_gst)
     ref      = s * ref_au
     dsf      = (ref + fba_aud) * dsf_rate
     fees     = ref + fba_aud + dsf
@@ -180,8 +180,8 @@ def calc_ca(p_eur, s_cad):
     ship_usd = ca_shipping * eur_usd
     lab_usd  = ca_labor * eur_usd
     cogs     = p_usd + ship_usd + lab_usd
-    sell_usd = s_cad * cad_usd          # CAD sell price → USD
-    fba_usd  = fba_cad * cad_usd        # CAD FBA fee → USD
+    sell_usd = s_cad * cad_usd
+    fba_usd  = fba_cad * cad_usd
     ref      = sell_usd * ref_ca
     dsf      = (ref + fba_usd) * dsf_rate
     fees     = ref + fba_usd + dsf
